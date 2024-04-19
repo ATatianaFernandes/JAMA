@@ -1,0 +1,148 @@
+import math
+import paho.mqtt.client as mqtt
+import numpy as np 
+import csv
+import pandas as pd
+
+sensor1= np.array([])    #Para armazenar dados dos sensores e ângulos
+sensor2= np.array([])
+sensor3= np.array([])
+sensor4= np.array([])
+variaveis = ('ax', 'ay', 'az', 'gx', 'gy', 'gz')
+angulo = np.array([])
+sensores = {
+    'braco_esquerdo': pd.DataFrame(columns=variaveis),
+    'braco_direito': pd.DataFrame(columns=variaveis),
+    'perna_direita': pd.DataFrame(columns=variaveis),
+    'perna_esquerda': pd.DataFrame(columns=variaveis)
+}
+
+caminho = 'dadossensor.txt' 
+
+with open(caminho,'w') as arquivo:
+    arquivo.write('simulation time: 3, frequence:20, dados do IMU\n')
+
+def IMUdata():
+    client.publish('cmd2dev9840', '{"op":1, "simulation":3}'+
+                   '"frequence":20, sensortype:2')
+def stopIMUdata():
+    client.publish('dev9840ss', '{"op":32}')
+
+def on_connect(client,userdata,flags,rc):
+    print("connect with result code"+str(rc))
+    client.subscribe("dev9840ss")
+    client.subscribe("dev9840status")
+    imu_data(client)
+
+
+
+def on_message(client, userdata, msg):
+    print(msg.topic, ": ", msg.payload.decode('utf8'))
+    if msg.topic == 'dev9840ss':
+        with open(caminho, 'a') as arquivo:
+            arquivo.write(msg.payload.decode('utf8') + '\n')
+
+
+client = mqtt.client()
+client.on_connect = on_connect
+client.on_message = on_message
+client.connect('0.tcp.sa.ngrok.io', 10618, 60)
+client.loop_start()
+
+def separar_sensores(arquivo):
+    lista_dados_braço_esquerdo = []
+    lista_dados_braço_direito = []
+    lista_dados_perna_esquerda = []
+    lista_dados_perna_direita = []
+
+    for line in arquivo:
+        dados_dos_sensores = line.split('],""[')
+        braço_esquerdo = dados_dos_sensores[0].split('[')[1]
+        braço_direito = dados_dos_sensores[1].split(",")[:6]
+        perna_esquerda = dados_dos_sensores[1].split(",")[6:12]
+        perna_direita = dados_dos_sensores[1].split(",")[12:]
+
+        for lista_dados, sensor_data in zip(
+            [lista_dados_braço_esquerdo, lista_dados_braço_direito,
+             lista_dados_perna_esquerda, lista_dados_perna_direita],
+            [braço_esquerdo, braço_direito, perna_esquerda, perna_direita]
+        ):
+            sensor_data = sensor_data.split(",")
+            sensor_data = [float(value) for value in sensor_data]
+            lista_dados.append(sensor_data)
+
+    return lista_dados_braço_esquerdo, lista_dados_braço_direito, lista_dados_perna_esquerda, lista_dados_perna_direita
+
+
+def calcular_angulo(lista_dados_sensor):
+    angulo_lista = []
+    for item in lista_dados_sensor:
+        M = 0.98
+        dt = 0.05
+        dados_w = item[3]
+        dados_a = (math.atan(item[0] / math.sqrt((item[1]) ** 2 + (item[2] ** 2))) * (180 / math.pi))
+        angulo = (M * (dados_w * dt) + (1 - M) * (dados_a)) / (1 - M)
+        angulo_lista.append(angulo)
+    return angulo_lista
+
+
+def somatorio(angulos):
+    somatorio = angulo.sum()
+    print("somatorio ", somatorio)
+
+def media(angulo):
+    media = angulo.mean()
+    print("media: ", media)
+
+with open("coletasensor.csv", "r") as arquivo:
+    lista_dados_braço_esquerdo, lista_dados_braço_direito, lista_dados_perna_esquerda, lista_dados_perna_direita = separar_sensores(arquivo)
+
+#lista_dados_braço_esquerdo, lista_dados_braço_direito, lista_dados_perna_esquerda, lista_dados_perna_direita = separar_sensores()
+
+angulo_braço_esquerdo_array = np.array(calcular_angulo(lista_angulos_braço_esquerdo))
+angulo_braço_direito_array = np.array(calcular_angulo(lista_angulos_braço_direito))
+angulo_perna_esquerda_array = np.array(calcular_angulo(lista_angulos_perna_esquerda))
+angulo_perna_direita_array = np.array(calcular_angulo(lista_angulos_direita_esquerda))
+
+somatorio(angulo_braço_esquerdo_array)
+somatorio(angulo_braço_direito_array)
+somatorio(angulo_perna_esquerda_array)
+somatorio(angulo_perna_direita_array)
+
+media(angulo_braço_esquerdo_array)
+media(angulo_braço_direito_array)
+media(angulo_perna_esquerda_array)
+media(angulo_perna_direita_array)
+
+with open('anguloprocessado.csv', 'w', newline='') as arquivocsv:
+    spamwrite = csv.writer(arquivocsv)
+
+with open('anguloprocessado.txt','w') as arquivotxt:
+        arquivotxt.write('sensor 1:\n')
+
+for x in sensor1:
+    angulo = np.append(angulo, np.around(ang(x, angulo), decimals=2))
+
+for i in angulo:
+    arquivotxt.write(str(i) + '\n')
+    spamwrite.writerow([str(i)])
+
+arquivotxt.close()
+arquivocsv.close()
+
+print('saídas geradas')
+print('somatório: ', np.around(angulo.sum(), decimals=2))
+print('média: ', np.around(angulo.mean(), decimals=2))
+print('ângulo menor: ', np.around(angulo.min(), decimals=2))
+print('ângulo maior: ', np.around(angulo.max(), decimals=2))
+print('integral: ', np.around(np.trapz(angulo), decimals=2))
+print('variância: ', np.around(angulo.var(),decimals=2))
+print('diferença entre ângulos: ', np.around(np.diff(angulo), decimals= 2))
+
+
+
+coleta dos 4 sensores simultaneos
+sensor1:
+tempo ax ay az gx gy gz
+0.000 3  4  1  3  1  1
+0.125 3  5  3  1  3  4
